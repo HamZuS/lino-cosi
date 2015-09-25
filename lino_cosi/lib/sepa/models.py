@@ -13,11 +13,10 @@ from lino_cosi.lib.sepa.camt import CamtParser
 import glob
 import os
 from django.db import models
-from lino.api import dd, _, rt
+from lino.api import dd, _
 from lino.core.utils import ChangeWatcher
 from .fields import IBANField, BICField
-from .utils import belgian_nban_to_iban_bic, iban2bic
-import time
+from .utils import belgian_nban_to_iban_bic, iban2bic, import_sepa_file
 
 logger = logging.getLogger(__name__)
 
@@ -56,67 +55,13 @@ class ImportStatements(dd.Action):
         count = 0
         if pth:
             for filename in glob.iglob(wc):
-                self.import_file(ar, filename)
+                import_sepa_file(filename,ar)
                 count += 1
             msg = "{0} xml files would have been imported.".format(count)
             dd.logger.info(msg)
             return ar.success(msg, alert=_("Success"))
         msg = "No import_statements_path configured."
         return ar.error(msg, alert=_("Error"))
-
-    def import_file(self, ar, filename):
-        Account = rt.modules.sepa.Account
-        Partner = rt.modules.contacts.Partner
-
-        msg = "File {0} would have imported.".format(filename)
-        """Parse a CAMT053 XML file."""
-        parser = CamtParser()
-        data_file = open(filename, 'rb').read()
-        try:
-            dd.logger.info("Try parsing with camt.")
-            res = parser.parse(data_file)
-            if res is not None:
-                for _statement in res:
-                    if _statement.get('account_number', None) is not None:
-                        # TODO : How to query an account by iban field ?
-                        # account = Account.objects.get(iban=_statement['account_number'])
-                        # if not account:
-                        #     account = Account.objects.get(id=1)
-                        account = Account.objects.get(id=1)
-                        if account:
-                            s = Statement(account=account,
-                                          date=_statement['date'].strftime("%Y-%m-%d"),
-                                          date_done=time.strftime("%Y-%m-%d"),
-                                          statement_number=_statement['name'],
-                                          balance_end=_statement['balance_end'],
-                                          balance_start=_statement['balance_start'],
-                                          balance_end_real=_statement['balance_end_real'],
-                                          currency_code=_statement['currency_code'])
-                            s.save()
-                            for _movement in _statement['transactions']:
-                                partner = None
-                                if _movement.get('partner_name', None) is not None:
-                                    if Partner.objects.filter(name=_movement['partner_name']).exists():
-                                        partner = Partner.objects.get(name=_movement['partner_name'])
-                                    else:
-                                        partner = Partner.objects.order_by('name')[0]
-                                # TODO :check if the movement is already imported.
-                                if not Movement.objects.filter(unique_import_id=_movement['unique_import_id']).exists():
-                                    _ref = _movement.get('ref', '') or ''
-                                    m = Movement(statement=s,
-                                                 unique_import_id=_movement['unique_import_id'],
-                                                 movement_date=_movement['date'],
-                                                 amount=_movement['amount'],
-                                                 partner=partner,
-                                                 partner_name=_movement['partner_name'],
-                                                 ref=_movement.get('ref', '') or '',
-                                                 bank_account=account)
-                                    m.save()
-
-        except ValueError:
-            dd.logger.info("Statement file was not a camt file.")
-        dd.logger.info(msg)
-        ar.info(msg)
 
 
 dd.inject_action('system.SiteConfig', import_sepa=ImportStatements())

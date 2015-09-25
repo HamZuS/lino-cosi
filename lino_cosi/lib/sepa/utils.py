@@ -42,6 +42,10 @@ See also:
 from __future__ import print_function
 
 import logging
+from lino.api import dd, _, rt
+from lino_cosi.lib.sepa.camt import CamtParser
+import time
+
 logger = logging.getLogger(__name__)
 
 from django.core.exceptions import ValidationError
@@ -966,9 +970,64 @@ more reliable because maintained by `an expert <http://www.ebcs.be>`_.
     return s.split('#')
 
 
+def import_sepa_file(filename, ar=None):
+    """Import the filename as an CAMT053 XML file.
+
+    :param filename: file path to get imported :Type :`str`
+    :param ar: the Action Request :class:`ActionRequest`
+    :return: False if the import catch an error ,otherwise True
+    """
+    Account = rt.modules.sepa.Account
+    Statement = rt.modules.sepa.Statement
+    Movement = rt.modules.sepa.Movement
+
+    msg = "File {0} would have imported.".format(filename)
+    """Parse a CAMT053 XML file."""
+    parser = CamtParser()
+    data_file = open(filename, 'rb').read()
+    try:
+        dd.logger.info("Try parsing with camt.")
+        res = parser.parse(data_file)
+        if res is not None:
+            for _statement in res:
+                _iban = _statement.get('account_number', None)
+                if _iban is not None:
+                    account = Account.objects.filter(iban=_iban)
+                    if account:
+                        s = Statement(account=account,
+                                      date=_statement['date'].strftime("%Y-%m-%d"),
+                                      date_done=time.strftime("%Y-%m-%d"),
+                                      statement_number=_statement['name'],
+                                      balance_end=_statement['balance_end'],
+                                      balance_start=_statement['balance_start'],
+                                      balance_end_real=_statement['balance_end_real'],
+                                      currency_code=_statement['currency_code'])
+                        s.save()
+                        for _movement in _statement['transactions']:
+                            if not Movement.objects.filter(unique_import_id=_movement['unique_import_id']).exists():
+                                _ref = _movement.get('ref', '') or ' '
+                                m = Movement(statement=s,
+                                             unique_import_id=_movement['unique_import_id'],
+                                             movement_date=_movement['date'],
+                                             amount=_movement['amount'],
+                                             partner_name=_movement['partner_name'],
+                                             ref=_ref,
+                                             bank_account=account)
+                                m.save()
+
+    except ValueError:
+        dd.logger.info("Statement file was not a camt file.")
+        return False
+    dd.logger.info(msg)
+    if ar is not None:
+        ar.info(msg)
+    return True
+
+
 def _test():
     import doctest
     doctest.testmod()
+
 
 if __name__ == "__main__":
     _test()
