@@ -177,8 +177,6 @@ class Statement(dd.Model):
     balance_end_real = dd.PriceField(_("Real end balance"), null=True)
     currency_code = models.CharField(_('Currency'), max_length=3)
 
-    # fields like statement_number, date, solde_initial, solde_final
-
 
 class Movement(dd.Model):
     """A movement within a bank statement.

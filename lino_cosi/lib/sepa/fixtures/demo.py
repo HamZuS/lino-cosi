@@ -33,6 +33,7 @@ from lino.utils.instantiator import Instantiator
 from lino.api import rt
 from lino_cosi.lib.sepa.camt import CamtParser
 from lino_cosi.lib.sepa.models import Movement, Statement
+from lino_cosi.lib.sepa.utils import import_sepa_file
 
 Company = Instantiator('contacts.Company', 'name url').build
 Account = Instantiator('sepa.Account', 'partner bic iban remark').build
@@ -135,43 +136,4 @@ def objects():
 
     wc = os.path.join(os.path.dirname(__file__), 'data', 'COD_20150907_O25MMF107I.xml')
     filename = glob.glob(wc)[0]
-    Account = rt.modules.sepa.Account
-    Partner = rt.modules.contacts.Partner
-    parser = CamtParser()
-    data_file = open(filename, 'rb').read()
-    try:
-        res = parser.parse(data_file)
-        if res is not None:
-            for _statement in res:
-                if _statement.get('account_number', None) is not None:
-                    # TODO : How to query an account by iban field ?
-                    account = Account.objects.get(id=1)
-                    if account:
-                        s = Statement(account=account,
-                                      date=_statement['date'].strftime("%Y-%m-%d"),
-                                      date_done=time.strftime("%Y-%m-%d"),
-                                      statement_number=_statement['name'],
-                                      balance_end=_statement['balance_end'],
-                                      balance_start=_statement['balance_start'],
-                                      balance_end_real=_statement['balance_end_real'],
-                                      currency_code=_statement['currency_code'])
-                        yield s
-                        for _movement in _statement['transactions']:
-                            partner = None
-                            if _movement.get('partner_name', None) is not None:
-                                if Partner.objects.filter(name=_movement['partner_name']).exists():
-                                    partner = Partner.objects.get(name=_movement['partner_name'])
-                                else:
-                                    partner = Partner.objects.order_by('name')[0]
-                            # TODO :check if the movement is already imported.
-                            if not Movement.objects.filter(unique_import_id=_movement['unique_import_id']).exists():
-                                yield Movement(statement=s,
-                                               unique_import_id=_movement['unique_import_id'],
-                                               movement_date=_movement['date'],
-                                               amount=_movement['amount'],
-                                               partner=partner,
-                                               partner_name=_movement['partner_name'],
-                                               ref=_movement.get('ref', '') or ' ',
-                                               bank_account=account)
-    except ValueError:
-        print("Import Error")
+    import_sepa_file(filename)
