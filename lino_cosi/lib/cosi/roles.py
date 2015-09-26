@@ -27,20 +27,21 @@ from lino.modlib.users.choicelists import UserProfiles
 from lino.core.roles import UserRole, SiteAdmin
 from lino.modlib.office.roles import OfficeStaff, OfficeUser
 from lino_cosi.lib.ledger.roles import LedgerUser, LedgerStaff
+from lino_cosi.lib.sepa.roles import SepaStaff
 
 
 class SiteUser(OfficeUser, LedgerUser):
     pass
 
 
-class SiteAdmin(SiteAdmin, OfficeStaff, LedgerStaff):
+class SiteAdmin(SiteAdmin, OfficeStaff, LedgerStaff, SepaStaff):
     pass
+
 
 UserProfiles.clear()
 
 add = UserProfiles.add_item
 
 add('000', _("Anonymous"), UserRole, name='anonymous', readonly=True)
-add('100', _("User"),           SiteUser)
-add('900', _("Administrator"),  SiteAdmin, name='admin')
-
+add('100', _("User"), SiteUser)
+add('900', _("Administrator"), SiteAdmin, name='admin')
